@@ -5,102 +5,112 @@
     <title>Liminal Space: Backrooms & Silent Hill</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #0b0b0d; font-family: monospace; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; background: rgba(255,255,255,0.3); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
-        #instructions { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #8a1a1a; text-align: center; font-size: 20px; cursor: pointer; background: rgba(0,0,0,0.8); padding: 20px; border: 1px solid #444; }
-        #ui { position: absolute; bottom: 20px; left: 20px; color: #777; font-size: 14px; pointer-events: none; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; background: rgba(255,255,255,0.4); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+        #instructions { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #8a1a1a; text-align: center; font-size: 20px; cursor: pointer; background: rgba(0,0,0,0.85); padding: 20px 40px; border: 1px solid #444; z-index: 10; box-shadow: 0 0 15px rgba(0,0,0,0.7); }
+        #ui { position: absolute; bottom: 20px; left: 20px; color: #777; font-size: 14px; pointer-events: none; z-index: 5; }
     </style>
+    <!-- Подключаем 3D движок Three.js -->
     <script src="https://cloudflare.com"></script>
 </head>
 <body>
 
     <div id="crosshair"></div>
-    <div id="instructions">Кликните, чтобы войти в Закулисье<br><span style="font-size:14px; color:#aaa;">(Управление: WASD + Мышь)</span></div>
+    <div id="instructions">
+        <b style="font-size:24px;">ВЫ ЗДЕСЬ ОДИН</b><br><br>
+        Кликните мышкой, чтобы войти в Закулисье<br>
+        <span style="font-size:14px; color:#aaa;">(Управление: WASD + Мышь)</span>
+    </div>
     <div id="ui">Уровень: Бесконечные коридоры | Статус: Выхода нет</div>
 
     <script>
-        // --- 1. Настройка сцены, тумана и камеры ---
+        // --- 1. Сцена, Камера и Сайлент Хилл Туман ---
         const scene = new THREE.Scene();
-        
-        // Густой туман в стиле Сайлент Хилл (цвет, начальное расстояние, конечное расстояние)
-        scene.background = new THREE.Color(0x0f0f12);
-        scene.fog = new THREE.FogExp2(0x0f0f12, 0.12); 
+        scene.background = new THREE.Color(0x0a0a0c);
+        // Плотный экспоненциальный туман для создания жуткой атмосферы
+        scene.fog = new THREE.FogExp2(0x0a0a0c, 0.15); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // --- 2. Освещение (Мрачный свет + Фонарик) ---
-        const ambientLight = new THREE.AmbientLight(0x111116); // Очень слабый общий свет
+        // --- 2. Освещение (Мрак + Карманный Фонарик) ---
+        const ambientLight = new THREE.AmbientLight(0x0c0c10); 
         scene.add(ambientLight);
 
-        // Фонарик игрока (направленный свет)
-        const flashlight = new THREE.SpotLight(0xfff9e6, 2, 15, Math.PI / 5, 0.5, 1);
-        flashlight.position.set(0, 0, 0);
+        // Фонарик игрока (яркий направленный свет с затуханием по краям)
+        const flashlight = new THREE.SpotLight(0xfff5d7, 3, 20, Math.PI / 4.5, 0.6, 1.2);
         scene.add(flashlight);
         scene.add(flashlight.target);
 
-        // --- 3. Генерация лабиринта (Закулисье) ---
-        const wallMat = new THREE.MeshLambertMaterial({ color: 0xbcab79 }); // Желтые обои Backrooms
-        const floorMat = new THREE.MeshLambertMaterial({ color: 0x5a4d3b }); // Старый ковролин
-        const ceilingMat = new THREE.MeshLambertMaterial({ color: 0x333333 }); // Потолочные плиты
+        // --- 3. Генерация лабиринта (Текстуры Закулисья) ---
+        const wallMat = new THREE.MeshLambertMaterial({ color: 0xcca662 });   // Желтые обои Backrooms
+        const floorMat = new THREE.MeshLambertMaterial({ color: 0x4a3b2c });  // Ковролин
+        const ceilingMat = new THREE.MeshLambertMaterial({ color: 0x2b2b2b });// Потолок
 
-        const mapSize = 20;
+        const mapSize = 16;
         const wallSize = 4;
-        // Карта лабиринта: 1 - стена, 0 - пустой коридор
+        
+        // Карта 16х16: 1 - стена, 0 - пустой коридор
         const map = [
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-            [1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,1],
-            [1,0,1,0,1,0,1,1,0,1,0,1,1,1,1,0,1,0,1,1],
-            [1,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,0,1],
-            [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,1,0,1],
-            [1,0,0,0,0,0,1,0,1,0,0,0,1,0,1,0,0,1,0,1],
-            [1,1,1,0,1,0,0,0,1,0,1,0,0,0,0,0,0,1,0,1],
-            [1,0,0,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,0,1],
-            [1,0,1,0,0,0,0,0,0,0,1,0,0,0,0,1,0,0,0,1],
-            [1,0,1,1,1,1,0,1,1,1,1,0,1,1,0,1,1,1,0,1],
-            [1,0,0,0,0,1,0,0,0,0,0,0,1,0,0,0,0,1,0,1],
-            [1,1,1,1,0,1,1,1,1,1,1,1,1,0,1,1,0,1,0,1],
-            [1,0,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,1],
-            [1,0,0,1,1,1,1,0,1,1,1,0,1,0,1,1,1,1,1,1],
-            [1,1,0,0,0,0,1,0,1,0,1,0,0,0,1,0,0,0,0,1],
-            [1,0,0,1,1,0,1,0,1,0,1,1,1,1,1,0,1,1,0,1],
-            [1,0,1,1,0,0,1,0,0,0,0,0,0,0,0,0,1,0,0,1],
-            [1,0,0,1,0,1,1,1,1,1,1,0,1,1,1,1,1,0,1,1],
-            [1,1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
-            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+            [1,0,0,0,0,1,0,0,0,0,0,1,0,0,0,1],
+            [1,0,1,1,0,1,0,1,1,1,0,1,0,1,0,1],
+            [1,0,1,0,0,0,0,0,0,1,0,0,0,1,0,1],
+            [1,0,1,0,1,1,1,1,0,1,1,1,1,1,0,1],
+            [1,0,0,0,1,0,0,1,0,0,0,0,0,0,0,1],
+            [1,1,1,0,1,0,0,1,1,1,1,1,0,1,1,1],
+            [1,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1],
+            [1,0,1,1,1,1,1,1,1,1,0,1,1,1,0,1],
+            [1,0,1,0,0,0,0,0,0,1,0,1,0,0,0,1],
+            [1,0,1,0,1,1,1,1,0,1,0,1,0,1,1,1],
+            [1,0,0,0,1,0,0,0,0,1,0,0,0,1,0,1],
+            [1,1,1,0,1,1,1,0,1,1,1,1,0,1,0,1],
+            [1,0,0,0,0,0,1,0,0,0,0,1,0,0,0,1],
+            [1,0,1,1,1,0,0,0,1,1,0,0,0,1,0,1],
+            [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
         ];
 
         const wallGeometry = new THREE.BoxGeometry(wallSize, wallSize, wallSize);
 
+        // Строим 3D-мир по нашей матрице
         for (let r = 0; r < mapSize; r++) {
             for (let c = 0; c < mapSize; c++) {
+                // Вычисляем координаты в 3D пространстве
+                const xPos = c * wallSize - (mapSize * wallSize) / 2;
+                const zPos = r * wallSize - (mapSize * wallSize) / 2;
+
                 if (map[r][c] === 1) {
                     const wall = new THREE.Mesh(wallGeometry, wallMat);
-                    wall.position.set(c * wallSize - (mapSize*wallSize)/2, wallSize/2, r * wallSize - (mapSize*wallSize)/2);
+                    wall.position.set(xPos, wallSize / 2, zPos);
                     scene.add(wall);
                 } else {
                     // Пол
                     const floorGeo = new THREE.PlaneGeometry(wallSize, wallSize);
                     const floor = new THREE.Mesh(floorGeo, floorMat);
                     floor.rotation.x = -Math.PI / 2;
-                    floor.position.set(c * wallSize - (mapSize*wallSize)/2, 0, r * wallSize - (mapSize*wallSize)/2);
+                    floor.position.set(xPos, 0, zPos);
                     scene.add(floor);
 
                     // Потолок
                     const ceilGeo = new THREE.PlaneGeometry(wallSize, wallSize);
                     const ceil = new THREE.Mesh(ceilGeo, ceilingMat);
                     ceil.rotation.x = Math.PI / 2;
-                    ceil.position.set(c * wallSize - (mapSize*wallSize)/2, wallSize, r * wallSize - (mapSize*wallSize)/2);
+                    ceil.position.set(xPos, wallSize, zPos);
                     scene.add(ceil);
                 }
             }
         }
 
-        // Стартовая позиция игрока (в пустом коридоре)
-        camera.position.set(-32, 1.8, -32); 
+        // Спавним игрока в гарантированно пустой точке [1][1] (коридор)
+        // Корректный расчет стартовой позиции без застревания в стенах
+        camera.position.set(
+            1 * wallSize - (mapSize * wallSize) / 2, 
+            1.7, // Высота глаз человека
+            1 * wallSize - (mapSize * wallSize) / 2
+        ); 
 
-        // --- 4. Управление камерой (Pointer Lock API) ---
+        // --- 4. Управление обзором мыши (Pointer Lock) ---
         const instructions = document.getElementById('instructions');
         
         instructions.addEventListener('click', () => {
@@ -108,11 +118,7 @@
         });
 
         document.addEventListener('pointerlockchange', () => {
-            if (document.pointerLockElement === document.body) {
-                instructions.style.display = 'none';
-            } else {
-                instructions.style.display = 'block';
-            }
+            instructions.style.display = document.pointerLockElement === document.body ? 'none' : 'block';
         });
 
         let yaw = 0;
@@ -120,72 +126,73 @@
         document.addEventListener('mousemove', (e) => {
             if (document.pointerLockElement !== document.body) return;
 
-            yaw -= e.movementX * 0.002;
-            pitch -= e.movementY * 0.002;
-
-            // Ограничение взгляда вверх-вниз
-            pitch = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, pitch));
+            yaw -= e.movementX * 0.0025;
+            pitch -= e.movementY * 0.0025;
+            pitch = Math.max(-Math.PI / 2.2, Math.min(Math.PI / 2.2, pitch));
 
             camera.rotation.order = "YXZ";
             camera.rotation.set(pitch, yaw, 0);
         });
 
-        // --- 5. Движение игрока ---
+        // --- 5. Логика передвижения и коллизий ---
         const keys = { w: false, a: false, s: false, d: false };
         window.addEventListener('keydown', (e) => { if(e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = true; });
         window.addEventListener('keyup', (e) => { if(e.key.toLowerCase() in keys) keys[e.key.toLowerCase()] = false; });
 
-        const speed = 0.06;
+        const speed = 0.05;
         const clock = new THREE.Clock();
 
-        // --- 6. Игровой цикл ---
+        // --- 6. Главный бесконечный цикл анимации ---
         function animate() {
             requestAnimationFrame(animate);
 
             const changeX = Math.sin(yaw) * speed;
             const changeZ = Math.cos(yaw) * speed;
 
-            // Запоминаем старую позицию для простой коллизии со стенами
+            // Запоминаем текущую координату перед шагом
             const oldX = camera.position.x;
             const oldZ = camera.position.z;
 
+            // Движение во все стороны относительно взгляда
             if (keys.w) { camera.position.x -= changeX; camera.position.z -= changeZ; }
             if (keys.s) { camera.position.x += changeX; camera.position.z += changeZ; }
             if (keys.a) { camera.position.x -= changeZ; camera.position.z += changeX; }
             if (keys.d) { camera.position.x += changeZ; camera.position.z -= changeX; }
 
-            // Очень базовая проверка коллизий по сетке карты
-            const checkGridX = Math.floor((camera.position.x + (mapSize*wallSize)/2 + wallSize/2) / wallSize);
-            const checkGridZ = Math.floor((camera.position.z + (mapSize*wallSize)/2 + wallSize/2) / wallSize);
+            // Вычисляем, в каком квадрате сетки мы оказались
+            const gridX = Math.floor((camera.position.x + (mapSize * wallSize) / 2 + wallSize / 2) / wallSize);
+            const gridZ = Math.floor((camera.position.z + (mapSize * wallSize) / 2 + wallSize / 2) / wallSize);
 
-            if (checkGridX >= 0 && checkGridX < mapSize && checkGridZ >= 0 && checkGridZ < mapSize) {
-                if (map[checkGridZ][checkGridX] === 1) {
-                    // Если врезались, возвращаем назад
+            // Если зашли на блок со стеной (1) — отменяем шаг назад
+            if (gridX >= 0 && gridX < mapSize && gridZ >= 0 && gridZ < mapSize) {
+                if (map[gridZ][gridX] === 1) {
                     camera.position.x = oldX;
                     camera.position.z = oldZ;
                 }
             }
 
-            // Эффект покачивания камеры при ходьбе (как в хоррорах)
+            // Покачивание камеры при ходьбе для реализма хоррора
             if (keys.w || keys.s || keys.a || keys.d) {
-                const elapsedTime = clock.getElapsedTime();
-                camera.position.y = 1.8 + Math.sin(elapsedTime * 8) * 0.04;
+                const time = clock.getElapsedTime();
+                camera.position.y = 1.7 + Math.sin(time * 9) * 0.03;
             }
 
-            // Привязка фонарика к камере
+            // Направляем фонарик в ту же сторону, куда направлена камера
             flashlight.position.copy(camera.position);
-            const vector = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
-            flashlight.target.position.copy(camera.position).add(vector);
+            const targetVector = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+            flashlight.target.position.copy(camera.position).add(targetVector);
 
             renderer.render(scene, camera);
         }
 
+        // Подстройка 3D под размеры окна при изменении разрешения экрана
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
+        // Запуск игры
         animate();
     </script>
 </body>
